@@ -2,15 +2,15 @@
 Build master team table: one row per team per tournament year.
 Spine: KenPom Barttorvik.csv
 
-PROG_, SEED_, and CONF_ aggregates are computed dynamically from
-Tournament Matchups.csv using only years strictly before each team's
-tournament year, eliminating the data leakage that occurred when
-joining all-time static lookup tables (Team/Seed/Conference Results.csv).
+Two feature groups:
 
-For a team in year s:
-  PROG_*  = program history across all tournament appearances in years < s
-  SEED_*  = seed history across all teams with same seed in years < s
-  CONF_*  = conference history across all teams in same conf in years < s
+1. Current-season metrics (KenPom Barttorvik.csv numeric cols):
+   Efficiency ratings, four factors, tempo, shooting splits, SOS, etc.
+   These are legitimately available before the tournament and carry no leakage.
+
+2. Historical aggregate features (computed from Tournament Matchups.csv):
+   PROG_*, SEED_*, CONF_* — computed using only years strictly before each
+   team's tournament year to eliminate the all-time static table leakage.
 
 Output: data/processed/master_team_table.csv
 """
@@ -32,6 +32,17 @@ SPINE_COLS = ["YEAR", "TEAM NO", "TEAM ID", "TEAM", "SEED", "ROUND", "CONF", "CO
 spine = kenpom[SPINE_COLS].copy()
 CONF_REMAP = {"P10": "P12", "SInd": "Slnd"}
 spine["CONF"] = spine["CONF"].replace(CONF_REMAP)
+
+# Current-season KenPom/Barttorvik metrics: all numeric columns except spine
+# identifiers and rank columns (rank cols are ordinal transforms of the raw
+# values — we keep the raw metrics and let feature selection handle redundancy).
+_NON_FEAT = set(SPINE_COLS) | {"QUAD NO", "QUAD ID"}
+KENPOM_FEAT_COLS = [
+    c for c in kenpom.columns
+    if c not in _NON_FEAT
+    and "RANK" not in c
+    and kenpom[c].dtype in ("int64", "float64")
+]
 
 # ── Step 3: Parse Tournament Matchups into per-team game results ─────────────
 # Each consecutive pair of rows (sorted by BY YEAR NO desc) is one game.
@@ -156,11 +167,16 @@ seed_lookup = seed_yr[["YEAR", "SEED"]    + SEED_FEAT]
 conf_lookup = conf_yr[["YEAR", "CONF"]    + CONF_FEAT]
 
 # ── Step 8: Join onto spine ──────────────────────────────────────────────────
+
+# 8a. Current-season KenPom metrics (joined on YEAR + TEAM NO)
+kenpom_slim = kenpom[["YEAR", "TEAM NO"] + KENPOM_FEAT_COLS].copy()
+
 master = (
     spine
-    .merge(prog_lookup, on=["YEAR", "TEAM ID"], how="left")
-    .merge(seed_lookup, on=["YEAR", "SEED"],    how="left")
-    .merge(conf_lookup, on=["YEAR", "CONF"],    how="left")
+    .merge(kenpom_slim,  on=["YEAR", "TEAM NO"], how="left")
+    .merge(prog_lookup,  on=["YEAR", "TEAM ID"], how="left")
+    .merge(seed_lookup,  on=["YEAR", "SEED"],    how="left")
+    .merge(conf_lookup,  on=["YEAR", "CONF"],    how="left")
 )
 
 # ── Step 9: Save and report ──────────────────────────────────────────────────
@@ -168,7 +184,11 @@ out_path = PROCESSED / "master_team_table.csv"
 master.to_csv(out_path, index=False)
 
 print(f"Shape: {master.shape}")
-print(f"Saved to {out_path}\n")
+print(f"Saved to {out_path}")
+print(f"  Current-season KenPom features: {len(KENPOM_FEAT_COLS)}")
+print(f"  Historical PROG_ features:      {len(PROG_FEAT)}")
+print(f"  Historical SEED_ features:      {len(SEED_FEAT)}")
+print(f"  Historical CONF_ features:      {len(CONF_FEAT)}\n")
 
 # Null counts (non-zero only)
 null_counts = master.isnull().sum()
