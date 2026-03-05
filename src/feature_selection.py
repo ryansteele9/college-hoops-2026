@@ -41,7 +41,8 @@ FOLD_YEARS = [y for y in range(2015, 2026) if y != 2020]
 
 # ── Data ─────────────────────────────────────────────────────────────────────
 df = pd.read_csv(PROCESSED / "matchup_dataset.csv")
-DIFF_COLS = [c for c in df.columns if c.startswith("DIFF_")]
+DIFF_COLS = [c for c in df.columns
+             if c.startswith("DIFF_") or c == "SEED_MATCHUP_UPSET_RATE"]
 TARGET    = "TEAM_A_WIN"
 N_FEAT    = len(DIFF_COLS)
 

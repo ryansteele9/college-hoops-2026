@@ -68,11 +68,51 @@ master_df  = pd.read_csv(PROCESSED / "master_team_table.csv")
 tourney_df = pd.read_csv(RAW / "Tournament Matchups.csv")
 selected   = (PROCESSED / "selected_features.txt").read_text().strip().splitlines()
 raw_feats  = [f.replace("DIFF_", "") for f in selected]
+
+# Indices of seed matchup features in the selected list (None if not present)
+_SEED_MATCH_WR_IDX = selected.index("DIFF_SEED_MATCHUP_WINRATE") \
+                     if "DIFF_SEED_MATCHUP_WINRATE" in selected else None
+_SEED_MATCH_UR_IDX = selected.index("SEED_MATCHUP_UPSET_RATE") \
+                     if "SEED_MATCHUP_UPSET_RATE"   in selected else None
 params     = json.loads((MODELS / "best_params.json").read_text())
 
 
 def model_params(p: dict) -> dict:
     return {k: v for k, v in p.items() if k not in _META_KEYS}
+
+
+def build_seed_table(df: pd.DataFrame) -> dict:
+    """Return {(seed_lo, seed_hi): lo_win_rate} from matchup rows (prior years)."""
+    dedup = df[df["TEAM_NO_A"] < df["TEAM_NO_B"]]
+    lo = dedup[["SEED_A", "SEED_B"]].min(axis=1).astype(int)
+    hi = dedup[["SEED_A", "SEED_B"]].max(axis=1).astype(int)
+    lo_won = (
+        ((dedup["SEED_A"] <= dedup["SEED_B"]) & (dedup["TEAM_A_WIN"] == 1)) |
+        ((dedup["SEED_A"] >  dedup["SEED_B"]) & (dedup["TEAM_A_WIN"] == 0))
+    )
+    tmp = pd.DataFrame({"lo": lo, "hi": hi, "lo_won": lo_won})
+    stats = tmp.groupby(["lo", "hi"])["lo_won"].agg(["sum", "count"])
+    return (stats["sum"] / stats["count"]).to_dict()
+
+
+def seed_match_vals(sa: int, sb: int, seed_table: dict) -> tuple:
+    """Return (diff_wr, upset_rate) for seeds sa vs sb given historical table."""
+    lo, hi = min(sa, sb), max(sa, sb)
+    lo_wr   = seed_table.get((lo, hi), 0.5)
+    diff_wr = (2 * lo_wr - 1) if sa <= sb else -(2 * lo_wr - 1)
+    return diff_wr, 1.0 - lo_wr
+
+
+def _patch_seed_feats_vec(X: np.ndarray, sa: int, sb: int,
+                          seed_table: dict) -> None:
+    """Patch seed matchup features into X[0, :] in-place."""
+    if _SEED_MATCH_WR_IDX is None and _SEED_MATCH_UR_IDX is None:
+        return
+    dw, ur = seed_match_vals(sa, sb, seed_table)
+    if _SEED_MATCH_WR_IDX is not None:
+        X[0, _SEED_MATCH_WR_IDX] = dw
+    if _SEED_MATCH_UR_IDX is not None:
+        X[0, _SEED_MATCH_UR_IDX] = ur
 
 
 # ── MLP helpers ───────────────────────────────────────────────────────────────
@@ -127,35 +167,42 @@ def make_lr_predictor(lr_model, imp_seed):
     return pred
 
 
-def make_tree_predictor(model, imputer):
+def make_tree_predictor(model, imputer, seed_table=None):
     def pred(fa, fb):
         X = np.array([[fa.get(f, np.nan) - fb.get(f, np.nan) for f in raw_feats]],
                      dtype=np.float32)
+        if seed_table is not None:
+            _patch_seed_feats_vec(X, fa["_SEED"], fb["_SEED"], seed_table)
         return float(model.predict_proba(imputer.transform(X))[:, 1][0])
     return pred
 
 
-def make_mlp_predictor(net, imp_fit, sc_fit):
+def make_mlp_predictor(net, imp_fit, sc_fit, seed_table=None):
     def pred(fa, fb):
         X = np.array([[fa.get(f, np.nan) - fb.get(f, np.nan) for f in raw_feats]],
                      dtype=np.float32)
+        if seed_table is not None:
+            _patch_seed_feats_vec(X, fa["_SEED"], fb["_SEED"], seed_table)
         X = sc_fit.transform(imp_fit.transform(X))
         with torch.no_grad():
             return float(net(torch.tensor(X, dtype=torch.float32)).squeeze())
     return pred
 
 
-def make_ensemble_predictor(rf_m, xgb_m, lgb_m, imputer):
+def make_ensemble_predictor(rf_m, xgb_m, lgb_m, imputer, seed_table=None):
     """Ensemble predictor with batch_predict for fast MC matrix build."""
     def pred(fa, fb):
         X = np.array([[fa.get(f, np.nan) - fb.get(f, np.nan) for f in raw_feats]],
                      dtype=np.float32)
+        if seed_table is not None:
+            _patch_seed_feats_vec(X, fa["_SEED"], fb["_SEED"], seed_table)
         X_imp = imputer.transform(X)
         return (float(rf_m.predict_proba(X_imp)[:, 1][0]) +
                 float(xgb_m.predict_proba(X_imp)[:, 1][0]) +
                 float(lgb_m.predict_proba(X_imp)[:, 1][0])) / 3
 
     def batch_pred(X_diffs: np.ndarray) -> np.ndarray:
+        """Seed matchup features must be pre-patched by caller before this call."""
         X_imp = imputer.transform(X_diffs.astype(np.float32))
         return (rf_m.predict_proba(X_imp)[:, 1] +
                 xgb_m.predict_proba(X_imp)[:, 1] +
@@ -275,7 +322,8 @@ def score_espn(predicted: list, actual: list) -> int:
 # ── Monte Carlo ESPN scoring ──────────────────────────────────────────────────
 def simulate_mc_espn(r64_pairs: list, feat_lookup: dict,
                      ens_pred, actual_winners: list,
-                     n_trials: int = MC_TRIALS) -> float:
+                     n_trials: int = MC_TRIALS,
+                     seed_table: dict | None = None) -> float:
     """
     Run n_trials stochastic bracket simulations using precomputed prob matrix.
     Returns mean ESPN score across trials.
@@ -300,6 +348,18 @@ def simulate_mc_espn(r64_pairs: list, feat_lookup: dict,
     if hasattr(ens_pred, "batch_predict"):
         pairs     = [(i, j) for i in range(n) for j in range(n) if i != j]
         X_diffs   = all_feats[[p[0] for p in pairs]] - all_feats[[p[1] for p in pairs]]
+        # Patch seed matchup features for each pair before calling batch predict
+        if seed_table is not None and \
+                (_SEED_MATCH_WR_IDX is not None or _SEED_MATCH_UR_IDX is not None):
+            all_seeds = [feat_lookup.get(tn, _NAN_FEATS).get("_SEED", 8)
+                         for tn in all_team_nos]
+            for k, (i, j) in enumerate(pairs):
+                dw, ur = seed_match_vals(int(all_seeds[i]), int(all_seeds[j]),
+                                         seed_table)
+                if _SEED_MATCH_WR_IDX is not None:
+                    X_diffs[k, _SEED_MATCH_WR_IDX] = dw
+                if _SEED_MATCH_UR_IDX is not None:
+                    X_diffs[k, _SEED_MATCH_UR_IDX] = ur
         probs_flat = ens_pred.batch_predict(X_diffs)
         for k, (i, j) in enumerate(pairs):
             prob_matrix[i, j] = probs_flat[k]
@@ -411,6 +471,9 @@ for year in FOLD_YEARS:
 
     print(f"trained ({time.time()-t0:.0f}s)", end="  ", flush=True)
 
+    # ── Seed matchup table (years < current year) ────────────────────────────
+    seed_table = build_seed_table(tr)
+
     # ── Build bracket ────────────────────────────────────────────────────────
     feat_lookup = get_year_features(year)
     all_games   = get_bracket_games(year)          # 63 triples
@@ -418,13 +481,15 @@ for year in FOLD_YEARS:
     actual_wins = [w for _, _, w in all_games]     # 63 actual winners
 
     # ── Deterministic simulations ─────────────────────────────────────────────
-    ens_pred = make_ensemble_predictor(rf_m, xgb_m, lgb_m, imp)
+    ens_pred = make_ensemble_predictor(rf_m, xgb_m, lgb_m, imp,
+                                       seed_table=seed_table)
     predictors = {
         "LR (seed)":     make_lr_predictor(lr_m, imp_seed),
-        "Random Forest": make_tree_predictor(rf_m, imp),
-        "XGBoost":       make_tree_predictor(xgb_m, imp),
-        "LightGBM":      make_tree_predictor(lgb_m, imp),
-        "MLP":           make_mlp_predictor(mlp_net, imp_fit, sc_fit),
+        "Random Forest": make_tree_predictor(rf_m, imp, seed_table=seed_table),
+        "XGBoost":       make_tree_predictor(xgb_m, imp, seed_table=seed_table),
+        "LightGBM":      make_tree_predictor(lgb_m, imp, seed_table=seed_table),
+        "MLP":           make_mlp_predictor(mlp_net, imp_fit, sc_fit,
+                                            seed_table=seed_table),
         "Ensemble":      ens_pred,
     }
 
@@ -435,7 +500,8 @@ for year in FOLD_YEARS:
 
     # ── Monte Carlo (Ensemble) ────────────────────────────────────────────────
     mc_mean       = simulate_mc_espn(r64_pairs, feat_lookup, ens_pred,
-                                     actual_wins, n_trials=MC_TRIALS)
+                                     actual_wins, n_trials=MC_TRIALS,
+                                     seed_table=seed_table)
     row["Ensemble MC (mean)"] = round(mc_mean, 1)
 
     all_results.append(row)

@@ -41,6 +41,52 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 SELECTED   = (PROCESSED / "selected_features.txt").read_text().strip().splitlines()
 RAW_FEATS  = [f.replace("DIFF_", "") for f in SELECTED]  # without DIFF_ prefix
 
+# Seed matchup feature positions in SELECTED (None if not present)
+_SEED_MATCH_WR_IDX = SELECTED.index("DIFF_SEED_MATCHUP_WINRATE") \
+                     if "DIFF_SEED_MATCHUP_WINRATE" in SELECTED else None
+_SEED_MATCH_UR_IDX = SELECTED.index("SEED_MATCHUP_UPSET_RATE") \
+                     if "SEED_MATCHUP_UPSET_RATE" in SELECTED else None
+
+
+def _build_seed_table() -> dict:
+    """Compute {(seed_lo, seed_hi): lo_win_rate} from full historical matchup data."""
+    if not (PROCESSED / "matchup_dataset.csv").exists():
+        return {}
+    _df = pd.read_csv(PROCESSED / "matchup_dataset.csv",
+                      usecols=["TEAM_NO_A", "TEAM_NO_B", "SEED_A", "SEED_B", "TEAM_A_WIN"])
+    _df = _df[_df["TEAM_NO_A"] < _df["TEAM_NO_B"]]  # one orientation per game
+    _lo = _df[["SEED_A", "SEED_B"]].min(axis=1).astype(int)
+    _hi = _df[["SEED_A", "SEED_B"]].max(axis=1).astype(int)
+    _lo_won = (
+        ((_df["SEED_A"] <= _df["SEED_B"]) & (_df["TEAM_A_WIN"] == 1)) |
+        ((_df["SEED_A"] >  _df["SEED_B"]) & (_df["TEAM_A_WIN"] == 0))
+    )
+    _tmp = pd.DataFrame({"lo": _lo, "hi": _hi, "lo_won": _lo_won})
+    _stats = _tmp.groupby(["lo", "hi"])["lo_won"].agg(["sum", "count"])
+    return (_stats["sum"] / _stats["count"]).to_dict()
+
+
+_SEED_TABLE = _build_seed_table()
+
+
+def _seed_match_vals(sa: int, sb: int) -> tuple:
+    """Return (diff_wr, upset_rate) for seeds sa vs sb from global _SEED_TABLE."""
+    lo, hi = min(sa, sb), max(sa, sb)
+    lo_wr   = _SEED_TABLE.get((lo, hi), 0.5)
+    diff_wr = (2 * lo_wr - 1) if sa <= sb else -(2 * lo_wr - 1)
+    return diff_wr, 1.0 - lo_wr
+
+
+def _patch_seed_feats(X: np.ndarray, sa: int, sb: int) -> None:
+    """Patch seed matchup features in feature vector X[0, :] in-place."""
+    if _SEED_MATCH_WR_IDX is None and _SEED_MATCH_UR_IDX is None:
+        return
+    diff_wr, upset_rate = _seed_match_vals(sa, sb)
+    if _SEED_MATCH_WR_IDX is not None:
+        X[0, _SEED_MATCH_WR_IDX] = diff_wr
+    if _SEED_MATCH_UR_IDX is not None:
+        X[0, _SEED_MATCH_UR_IDX] = upset_rate
+
 SEED_BRACKET_ORDER = [1, 16, 8, 9, 5, 12, 4, 13, 6, 11, 3, 14, 7, 10, 2, 15]
 ROUND_NAMES = {64: "R64", 32: "R32", 16: "S16", 8: "E8", 4: "F4", 2: "F2", 1: "CHAMP"}
 ROUND_LIST  = ["R64", "R32", "S16", "E8", "F4", "F2", "CHAMP"]
@@ -100,6 +146,7 @@ def make_predictor(bundle):
         def pred(fa, fb):
             X = np.array([[fa.get(f, np.nan) - fb.get(f, np.nan) for f in RAW_FEATS]],
                          dtype=np.float32)
+            _patch_seed_feats(X, int(fa.get("_SEED", 8)), int(fb.get("_SEED", 8)))
             return float(mdl.predict_proba(imp.transform(X))[:, 1][0])
 
     elif mt == "ensemble":
@@ -109,12 +156,14 @@ def make_predictor(bundle):
         def pred(fa, fb):
             X = np.array([[fa.get(f, np.nan) - fb.get(f, np.nan) for f in RAW_FEATS]],
                          dtype=np.float32)
+            _patch_seed_feats(X, int(fa.get("_SEED", 8)), int(fb.get("_SEED", 8)))
             X_imp = imp.transform(X)
             return sum(w * float(m.predict_proba(X_imp)[:, 1][0])
                        for m, w in zip(models, weights))
 
         def batch_pred(X_diffs: np.ndarray) -> np.ndarray:
-            """Batch predict. X_diffs shape (n_pairs, n_feats). Returns (n_pairs,)."""
+            """Batch predict. X_diffs shape (n_pairs, n_feats). Returns (n_pairs,).
+            Seed matchup features must be pre-patched into X_diffs by the caller."""
             X_imp = imp.transform(X_diffs.astype(np.float32))
             return sum(w * m.predict_proba(X_imp)[:, 1]
                        for m, w in zip(models, weights))
@@ -132,6 +181,7 @@ def make_predictor(bundle):
         def pred(fa, fb):
             X = np.array([[fa.get(f, np.nan) - fb.get(f, np.nan) for f in RAW_FEATS]],
                          dtype=np.float32)
+            _patch_seed_feats(X, int(fa.get("_SEED", 8)), int(fb.get("_SEED", 8)))
             X = sc.transform(imp.transform(X))
             with torch.no_grad():
                 return float(net(torch.tensor(X, dtype=torch.float32)).squeeze())
@@ -367,6 +417,15 @@ def run_monte_carlo(bracket: dict, ens_predictor,
         # Build all (i,j) i≠j pairs in one shot and call predict_proba once per model
         pairs = [(i, j) for i in range(n) for j in range(n) if i != j]
         X_diffs = all_feats[[p[0] for p in pairs]] - all_feats[[p[1] for p in pairs]]
+        # Patch seed matchup features for each pair using team seeds
+        if _SEED_MATCH_WR_IDX is not None or _SEED_MATCH_UR_IDX is not None:
+            all_seeds = [t["seed"] for t in all_teams]
+            for k, (i, j) in enumerate(pairs):
+                dw, ur = _seed_match_vals(all_seeds[i], all_seeds[j])
+                if _SEED_MATCH_WR_IDX is not None:
+                    X_diffs[k, _SEED_MATCH_WR_IDX] = dw
+                if _SEED_MATCH_UR_IDX is not None:
+                    X_diffs[k, _SEED_MATCH_UR_IDX] = ur
         probs_flat = ens_predictor.batch_predict(X_diffs)
         for k, (i, j) in enumerate(pairs):
             prob_matrix[i, j] = probs_flat[k]

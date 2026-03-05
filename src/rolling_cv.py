@@ -47,7 +47,8 @@ MODEL_NAMES = ["LR (seed)", "Random Forest", "XGBoost", "LightGBM", "MLP"]
 
 # ── Data ─────────────────────────────────────────────────────────────────────
 df = pd.read_csv(PROCESSED / "matchup_dataset.csv")
-DIFF_COLS = [c for c in df.columns if c.startswith("DIFF_")]
+DIFF_COLS = [c for c in df.columns
+             if c.startswith("DIFF_") or c == "SEED_MATCHUP_UPSET_RATE"]
 TARGET    = "TEAM_A_WIN"
 
 # ── MLP ───────────────────────────────────────────────────────────────────────

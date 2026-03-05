@@ -5,6 +5,7 @@ Each row = one head-to-head game. Dataset is mirrored (symmetric).
 Target: TEAM_A_WIN (1 if Team A won, 0 if lost).
 """
 
+import numpy as np
 import pandas as pd
 from pathlib import Path
 
@@ -73,6 +74,50 @@ for col in num_cols:
     games[diff_name] = games[f"{col}_A"] - games[f"{col}_B"]
     diff_cols.append(diff_name)
 
+# ── Seed matchup historical win rates (leak-free expanding window) ─────────────
+# For each game (year s, seeds sa vs sb), compute P(sa wins vs sb historically)
+# using only tournament data from years < s.  Stored as 2*WR_A-1 (centred on 0)
+# so that mirror negation (−DIFF) gives the correct flipped value for WR_B.
+_tmp = games[["YEAR", "GAME_ID", "SEED_A", "SEED_B", "TEAM_A_WIN"]].copy()
+_tmp["_lo"] = _tmp[["SEED_A", "SEED_B"]].min(axis=1).astype(int)
+_tmp["_hi"] = _tmp[["SEED_A", "SEED_B"]].max(axis=1).astype(int)
+# lo_won = 1 when the better (lower-numbered) seed wins
+_tmp["_lo_won"] = (
+    ((_tmp["SEED_A"] <= _tmp["SEED_B"]) & (_tmp["TEAM_A_WIN"] == 1)) |
+    ((_tmp["SEED_A"] >  _tmp["SEED_B"]) & (_tmp["TEAM_A_WIN"] == 0))
+).astype(int)
+
+_feat_rows = []
+for _yr in sorted(games["YEAR"].unique()):
+    _prior   = _tmp[_tmp["YEAR"] < _yr]
+    _yr_rows = _tmp[_tmp["YEAR"] == _yr].copy()
+    if len(_prior) == 0:
+        _yr_rows["DIFF_SEED_MATCHUP_WINRATE"] = np.nan
+        _yr_rows["SEED_MATCHUP_UPSET_RATE"]   = np.nan
+    else:
+        _stats        = _prior.groupby(["_lo", "_hi"])["_lo_won"].agg(["sum", "count"])
+        _stats["_wr"] = _stats["sum"] / _stats["count"]
+        _lut          = _stats["_wr"].to_dict()   # {(lo, hi): lo_win_rate}
+
+        def _vals(row, lut=_lut):
+            lo_wr = lut.get((row["_lo"], row["_hi"]), np.nan)
+            if np.isnan(lo_wr):
+                return np.nan, np.nan
+            diff_wr    = (2*lo_wr - 1) if row["SEED_A"] <= row["SEED_B"] \
+                         else -(2*lo_wr - 1)
+            return diff_wr, 1.0 - lo_wr
+
+        _out = _yr_rows.apply(_vals, axis=1, result_type="expand")
+        _out.columns = ["DIFF_SEED_MATCHUP_WINRATE", "SEED_MATCHUP_UPSET_RATE"]
+        _yr_rows[["DIFF_SEED_MATCHUP_WINRATE", "SEED_MATCHUP_UPSET_RATE"]] = _out.values
+
+    _feat_rows.append(
+        _yr_rows[["YEAR", "GAME_ID", "DIFF_SEED_MATCHUP_WINRATE", "SEED_MATCHUP_UPSET_RATE"]])
+
+_seed_feats = pd.concat(_feat_rows, ignore_index=True)
+games = games.merge(_seed_feats, on=["YEAR", "GAME_ID"], how="left")
+diff_cols.append("DIFF_SEED_MATCHUP_WINRATE")
+
 # ── Assemble final columns ────────────────────────────────────────────────────
 id_cols = ["YEAR", "GAME_ID",
            "TEAM_NO_A", "TEAM_A", "SEED_A", "SCORE_A",
@@ -81,7 +126,7 @@ id_cols = ["YEAR", "GAME_ID",
 feat_a   = [f"{c}_A" for c in num_cols] + ["ADJOE_A"]
 feat_b   = [f"{c}_B" for c in num_cols] + ["ADJOE_B"]
 
-games = games[id_cols + feat_a + feat_b + diff_cols]
+games = games[id_cols + feat_a + feat_b + diff_cols + ["SEED_MATCHUP_UPSET_RATE"]]
 
 # ── Mirror dataset (swap A/B, flip target) ────────────────────────────────────
 mirror = games.copy()
