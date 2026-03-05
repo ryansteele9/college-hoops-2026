@@ -1,9 +1,9 @@
 """
 Hyperparameter tuning for all five models using Optuna (50 trials each).
 Objective: mean ROC-AUC across walk-forward CV folds (2015-2025, excl 2020).
-Features:  10 selected features from data/processed/selected_features.txt.
+Features:  selected features from data/processed/selected_features.txt.
 
-MLP search space includes architecture (layers, hidden size, dropout).
+MLP search space includes architecture (layers, hidden size up to 256, dropout).
 Best params saved to models/best_params.json.
 Final table: tuned vs untuned walk-forward AUC for all five models.
 """
@@ -139,7 +139,7 @@ def wf_auc_mlp(df, feature_cols, hidden, n_layers, dropout, lr, wd):
 # Untuned baselines (10 selected features, default params)
 # ═════════════════════════════════════════════════════════════════════════════
 print("=" * 60)
-print("Computing untuned baselines (10 features, default params)...")
+print(f"Computing untuned baselines ({len(selected)} features, default params)...")
 print("=" * 60)
 
 untuned = {}
@@ -292,7 +292,7 @@ print(f"  Best AUC: {study_lgb.best_value:.4f}  params: {study_lgb.best_params}"
 print(f"\n[5/5] Tuning MLP ({N_TRIALS} trials)...")
 
 def mlp_objective(trial):
-    hidden   = trial.suggest_categorical("hidden_size", [16, 32, 64, 128])
+    hidden   = trial.suggest_categorical("hidden_size", [16, 32, 64, 128, 256])
     n_layers = trial.suggest_int("n_layers", 1, 3)
     dropout  = trial.suggest_float("dropout", 0.0, 0.5)
     lr       = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
@@ -360,7 +360,7 @@ tuned["MLP"] = (a.mean(), a.std())
 
 # ── Comparison table ──────────────────────────────────────────────────────────
 print("\n" + "=" * 66)
-print("TUNED vs UNTUNED — Walk-Forward AUC (10 selected features)")
+print(f"TUNED vs UNTUNED — Walk-Forward AUC ({len(selected)} selected features)")
 print("=" * 66)
 rows = []
 for name in ["LR (seed only)", "Random Forest", "XGBoost", "LightGBM", "MLP"]:

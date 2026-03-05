@@ -4,38 +4,38 @@
     "penalty": "l1"
   },
   "random_forest": {
-    "n_estimators": 319,
-    "max_depth": 12,
-    "min_samples_leaf": 13,
+    "n_estimators": 199,
+    "max_depth": 4,
+    "min_samples_leaf": 4,
     "max_features": 0.5
   },
   "xgboost": {
-    "n_estimators": 345,
-    "max_depth": 7,
-    "learning_rate": 0.018049753856768592,
-    "subsample": 0.8234362387939118,
-    "colsample_bytree": 0.6398618832076391,
-    "gamma": 3.360943480061265,
-    "min_child_weight": 9,
-    "reg_alpha": 0.37438035556434096,
-    "reg_lambda": 0.018304745718861683
+    "n_estimators": 397,
+    "max_depth": 2,
+    "learning_rate": 0.010651299516111847,
+    "subsample": 0.8565959146399651,
+    "colsample_bytree": 0.624940064070611,
+    "gamma": 4.706223593833493,
+    "min_child_weight": 4,
+    "reg_alpha": 5.4541498697944375,
+    "reg_lambda": 0.0455398985473322
   },
   "lightgbm": {
-    "n_estimators": 210,
-    "num_leaves": 12,
-    "max_depth": 5,
-    "learning_rate": 0.02248724369327722,
-    "subsample": 0.9411400587117567,
-    "colsample_bytree": 0.9782618371735233,
-    "min_child_samples": 13,
-    "reg_alpha": 0.0002124964917482522,
-    "reg_lambda": 4.88336775332619
+    "n_estimators": 385,
+    "num_leaves": 11,
+    "max_depth": 8,
+    "learning_rate": 0.010042946423260223,
+    "subsample": 0.6139199457453584,
+    "colsample_bytree": 0.7175091218326058,
+    "min_child_samples": 5,
+    "reg_alpha": 3.9219146124224085,
+    "reg_lambda": 2.5475365041573195
   },
   "mlp": {
-    "hidden_size": 128,
+    "hidden_size": 16,
     "n_layers": 1,
-    "dropout": 0.1208364424331362,
-    "lr": 0.009636438580300326,
-    "weight_decay": 0.0026370107123587297
+    "dropout": 0.2177721323611982,
+    "lr": 0.0001743844948527828,
+    "weight_decay": 0.001750464347325694
   }
 }
