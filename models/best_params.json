@@ -1,0 +1,41 @@
+{
+  "logistic_regression": {
+    "C": 0.0745934328572655,
+    "penalty": "l1"
+  },
+  "random_forest": {
+    "n_estimators": 319,
+    "max_depth": 12,
+    "min_samples_leaf": 13,
+    "max_features": 0.5
+  },
+  "xgboost": {
+    "n_estimators": 345,
+    "max_depth": 7,
+    "learning_rate": 0.018049753856768592,
+    "subsample": 0.8234362387939118,
+    "colsample_bytree": 0.6398618832076391,
+    "gamma": 3.360943480061265,
+    "min_child_weight": 9,
+    "reg_alpha": 0.37438035556434096,
+    "reg_lambda": 0.018304745718861683
+  },
+  "lightgbm": {
+    "n_estimators": 210,
+    "num_leaves": 12,
+    "max_depth": 5,
+    "learning_rate": 0.02248724369327722,
+    "subsample": 0.9411400587117567,
+    "colsample_bytree": 0.9782618371735233,
+    "min_child_samples": 13,
+    "reg_alpha": 0.0002124964917482522,
+    "reg_lambda": 4.88336775332619
+  },
+  "mlp": {
+    "hidden_size": 128,
+    "n_layers": 1,
+    "dropout": 0.1208364424331362,
+    "lr": 0.009636438580300326,
+    "weight_decay": 0.0026370107123587297
+  }
+}
