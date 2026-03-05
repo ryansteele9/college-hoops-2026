@@ -1,14 +1,30 @@
 {
   "logistic_regression": {
     "C": 0.0745934328572655,
-    "penalty": "l1"
+    "penalty": "l1",
+    "calibration": {
+      "ece_before": 0.084,
+      "ece_after": 0.0906,
+      "ll_before": 0.5663,
+      "ll_after": 0.571,
+      "auc_before": 0.7793,
+      "auc_after": 0.7793
+    }
   },
   "random_forest": {
     "n_estimators": 199,
     "max_depth": 4,
     "min_samples_leaf": 4,
     "max_features": 0.5,
-    "decay_rate": 0.919598
+    "decay_rate": 0.919598,
+    "calibration": {
+      "ece_before": 0.0983,
+      "ece_after": 0.098,
+      "ll_before": 0.5351,
+      "ll_after": 0.5401,
+      "auc_before": 0.8072,
+      "auc_after": 0.8072
+    }
   },
   "xgboost": {
     "n_estimators": 397,
@@ -20,7 +36,15 @@
     "min_child_weight": 4,
     "reg_alpha": 5.4541498697944375,
     "reg_lambda": 0.0455398985473322,
-    "decay_rate": 0.997292
+    "decay_rate": 0.997292,
+    "calibration": {
+      "ece_before": 0.0947,
+      "ece_after": 0.0907,
+      "ll_before": 0.5425,
+      "ll_after": 0.5448,
+      "auc_before": 0.8065,
+      "auc_after": 0.8065
+    }
   },
   "lightgbm": {
     "n_estimators": 385,
@@ -32,7 +56,15 @@
     "min_child_samples": 5,
     "reg_alpha": 3.9219146124224085,
     "reg_lambda": 2.5475365041573195,
-    "decay_rate": 0.993848
+    "decay_rate": 0.993848,
+    "calibration": {
+      "ece_before": 0.0788,
+      "ece_after": 0.0753,
+      "ll_before": 0.5365,
+      "ll_after": 0.5415,
+      "auc_before": 0.8055,
+      "auc_after": 0.8055
+    }
   },
   "mlp": {
     "hidden_size": 16,
@@ -40,7 +72,15 @@
     "dropout": 0.2177721323611982,
     "lr": 0.0001743844948527828,
     "weight_decay": 0.001750464347325694,
-    "decay_rate": 0.879598
+    "decay_rate": 0.879598,
+    "calibration": {
+      "ece_before": 0.0736,
+      "ece_after": 0.0794,
+      "ll_before": 0.5505,
+      "ll_after": 0.5538,
+      "auc_before": 0.7911,
+      "auc_after": 0.7911
+    }
   },
   "ensemble_rf_xgb_lgbm": {
     "components": [
@@ -55,6 +95,14 @@
     ],
     "combination": "average",
     "cv_mean_auc": 0.8068,
-    "cv_std_auc": 0.0514
+    "cv_std_auc": 0.0514,
+    "calibration": {
+      "ece_before": 0.083,
+      "ece_after": 0.0945,
+      "ll_before": 0.5364,
+      "ll_after": 0.5405,
+      "auc_before": 0.8068,
+      "auc_after": 0.8068
+    }
   }
 }
