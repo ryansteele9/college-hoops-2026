@@ -14,6 +14,9 @@ PROCESSED = Path("data/processed")
 # ── Load data ────────────────────────────────────────────────────────────────
 matchups = pd.read_csv(RAW / "Tournament Matchups.csv")
 master   = pd.read_csv(PROCESSED / "master_team_table.csv")
+adjoe_raw = pd.read_csv(RAW / "KenPom Barttorvik.csv",
+                        usecols=["YEAR", "TEAM NO", "KADJ O"]
+                        ).rename(columns={"KADJ O": "ADJOE"})
 
 # ── Pair games ───────────────────────────────────────────────────────────────
 # Each game is two consecutive rows sorted by BY YEAR NO descending.
@@ -54,10 +57,17 @@ games = games.merge(
     on=["YEAR", "TEAM_NO_B"], how="left"
 )
 
-# ── Compute differentials (Team A minus Team B) ───────────────────────────────
-games["DIFF_SEED"] = games["SEED_A"] - games["SEED_B"]
+# ── Join current-season ADJOE for Team A and Team B ───────────────────────────
+games = games.merge(adjoe_raw.rename(columns={"TEAM NO": "TEAM_NO_A", "ADJOE": "ADJOE_A"}),
+                    on=["YEAR", "TEAM_NO_A"], how="left")
+games = games.merge(adjoe_raw.rename(columns={"TEAM NO": "TEAM_NO_B", "ADJOE": "ADJOE_B"}),
+                    on=["YEAR", "TEAM_NO_B"], how="left")
 
-diff_cols = ["DIFF_SEED"]
+# ── Compute differentials (Team A minus Team B) ───────────────────────────────
+games["DIFF_SEED"]  = games["SEED_A"]  - games["SEED_B"]
+games["DIFF_ADJOE"] = games["ADJOE_A"] - games["ADJOE_B"]
+
+diff_cols = ["DIFF_SEED", "DIFF_ADJOE"]
 for col in num_cols:
     diff_name = f"DIFF_{col}"
     games[diff_name] = games[f"{col}_A"] - games[f"{col}_B"]
@@ -68,8 +78,8 @@ id_cols = ["YEAR", "GAME_ID",
            "TEAM_NO_A", "TEAM_A", "SEED_A", "SCORE_A",
            "TEAM_NO_B", "TEAM_B", "SEED_B", "SCORE_B",
            "TEAM_A_WIN"]
-feat_a   = [f"{c}_A" for c in num_cols]
-feat_b   = [f"{c}_B" for c in num_cols]
+feat_a   = [f"{c}_A" for c in num_cols] + ["ADJOE_A"]
+feat_b   = [f"{c}_B" for c in num_cols] + ["ADJOE_B"]
 
 games = games[id_cols + feat_a + feat_b + diff_cols]
 
