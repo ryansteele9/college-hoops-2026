@@ -1,0 +1,64 @@
+round,team_a,seed_a,team_b,seed_b,p_a_wins,winner,winner_seed
+R64,Auburn,1,Alabama St.,16,0.8981,Auburn,1
+R64,Louisville,8,Creighton,9,0.5362,Louisville,8
+R64,Michigan,5,UC San Diego,12,0.7342,Michigan,5
+R64,Texas A&M,4,Yale,13,0.7868,Texas A&M,4
+R64,Mississippi,6,North Carolina,11,0.6738,Mississippi,6
+R64,Iowa St.,3,Lipscomb,14,0.8315,Iowa St.,3
+R64,Marquette,7,New Mexico,10,0.6071,Marquette,7
+R64,Michigan St.,2,Bryant,15,0.8684,Michigan St.,2
+R32,Auburn,1,Louisville,8,0.7342,Auburn,1
+R32,Michigan,5,Texas A&M,4,0.4638,Texas A&M,4
+R32,Mississippi,6,Iowa St.,3,0.3929,Iowa St.,3
+R32,Marquette,7,Michigan St.,2,0.3262,Michigan St.,2
+S16,Auburn,1,Texas A&M,4,0.6071,Auburn,1
+S16,Iowa St.,3,Michigan St.,2,0.4638,Michigan St.,2
+E8,Auburn,1,Michigan St.,2,0.5362,Auburn,1
+R64,Florida,1,Norfolk St.,16,0.8981,Florida,1
+R64,Connecticut,8,Oklahoma,9,0.5362,Connecticut,8
+R64,Memphis,5,Colorado St.,12,0.7342,Memphis,5
+R64,Maryland,4,Grand Canyon,13,0.7868,Maryland,4
+R64,Missouri,6,Drake,11,0.6738,Missouri,6
+R64,Texas Tech,3,UNC Wilmington,14,0.8315,Texas Tech,3
+R64,Kansas,7,Arkansas,10,0.6071,Kansas,7
+R64,St. John's,2,Nebraska Omaha,15,0.8684,St. John's,2
+R32,Florida,1,Connecticut,8,0.7342,Florida,1
+R32,Memphis,5,Maryland,4,0.4638,Maryland,4
+R32,Missouri,6,Texas Tech,3,0.3929,Texas Tech,3
+R32,Kansas,7,St. John's,2,0.3262,St. John's,2
+S16,Florida,1,Maryland,4,0.6071,Florida,1
+S16,Texas Tech,3,St. John's,2,0.4638,St. John's,2
+E8,Florida,1,St. John's,2,0.5362,Florida,1
+R64,Duke,1,Mount St. Mary's,16,0.8981,Duke,1
+R64,Mississippi St.,8,Baylor,9,0.5362,Mississippi St.,8
+R64,Oregon,5,Liberty,12,0.7342,Oregon,5
+R64,Arizona,4,Akron,13,0.7868,Arizona,4
+R64,BYU,6,VCU,11,0.6738,BYU,6
+R64,Wisconsin,3,Montana,14,0.8315,Wisconsin,3
+R64,Saint Mary's,7,Vanderbilt,10,0.6071,Saint Mary's,7
+R64,Alabama,2,Robert Morris,15,0.8684,Alabama,2
+R32,Duke,1,Mississippi St.,8,0.7342,Duke,1
+R32,Oregon,5,Arizona,4,0.4638,Arizona,4
+R32,BYU,6,Wisconsin,3,0.3929,Wisconsin,3
+R32,Saint Mary's,7,Alabama,2,0.3262,Alabama,2
+S16,Duke,1,Arizona,4,0.6071,Duke,1
+S16,Wisconsin,3,Alabama,2,0.4638,Alabama,2
+E8,Duke,1,Alabama,2,0.5362,Duke,1
+R64,Houston,1,SIU Edwardsville,16,0.8981,Houston,1
+R64,Gonzaga,8,Georgia,9,0.5362,Gonzaga,8
+R64,Clemson,5,McNeese St.,12,0.7342,Clemson,5
+R64,Purdue,4,High Point,13,0.7868,Purdue,4
+R64,Illinois,6,Xavier,11,0.6738,Illinois,6
+R64,Kentucky,3,Troy,14,0.8315,Kentucky,3
+R64,UCLA,7,Utah St.,10,0.6071,UCLA,7
+R64,Tennessee,2,Wofford,15,0.8684,Tennessee,2
+R32,Houston,1,Gonzaga,8,0.7342,Houston,1
+R32,Clemson,5,Purdue,4,0.4638,Purdue,4
+R32,Illinois,6,Kentucky,3,0.3929,Kentucky,3
+R32,UCLA,7,Tennessee,2,0.3262,Tennessee,2
+S16,Houston,1,Purdue,4,0.6071,Houston,1
+S16,Kentucky,3,Tennessee,2,0.4638,Tennessee,2
+E8,Houston,1,Tennessee,2,0.5362,Houston,1
+F4,Auburn,1,Florida,1,0.5,Auburn,1
+F4,Duke,1,Houston,1,0.5,Duke,1
+CHAMP,Auburn,1,Duke,1,0.5,Auburn,1
