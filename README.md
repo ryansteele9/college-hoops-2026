@@ -2,7 +2,7 @@
 
 An end-to-end machine learning pipeline for predicting the 2026 NCAA Men's Basketball Tournament. Six optimized models produce deterministic bracket predictions and Monte Carlo championship probabilities for all 64 teams.
 
-**Validation (2025 tournament):** Ensemble model achieved **0.806 AUC** on a fully leak-free walk-forward cross-validation framework.
+**Validation (2025 tournament):** Ensemble model achieved **0.806 AUC** on a fully leak-free walk-forward cross-validation framework. Historical ESPN bracket backtest (2015–2025, excl. 2020) shows MLP averaging **985 pts/year** and Random Forest **933 pts/year** vs. a theoretical max of 1,920.
 
 ---
 
@@ -107,6 +107,7 @@ src/rolling_cv.py                # Walk-forward CV evaluation framework
 src/tune_hyperparams.py          # Optuna (50 trials per model)
     ↓
 src/bracket_simulator.py         # Round-by-round simulation + Monte Carlo
+src/historical_backtest.py       # Walk-forward ESPN bracket scoring (2015–2025)
     ↓
 run_2026.py                      # Single entry point for predictions
 ```
@@ -161,6 +162,7 @@ college-hoops-2026/
 │       ├── matchup_dataset.csv
 │       ├── selected_features.txt
 │       ├── rolling_cv_results.csv
+│       ├── backtest_results.csv  # ESPN scores per model per year
 │       └── simulator_outputs/  # Bracket predictions per model
 ├── models/
 │   ├── random_forest.pkl
@@ -168,7 +170,8 @@ college-hoops-2026/
 │   ├── lightgbm.pkl
 │   ├── mlp.pt
 │   ├── ensemble_rf_xgb_lgbm.pkl
-│   └── best_params.json
+│   ├── best_params.json
+│   └── backtest_espn_scores.png  # Bar chart: ESPN score by model & year
 ├── src/
 │   ├── audit_csvs.py
 │   ├── build_master_table.py
@@ -177,7 +180,8 @@ college-hoops-2026/
 │   ├── cv_dedup_eval.py
 │   ├── train_models.py
 │   ├── tune_hyperparams.py
-│   └── bracket_simulator.py
+│   ├── bracket_simulator.py
+│   └── historical_backtest.py
 ├── notebooks/
 ├── run_2026.py                 # ← Entry point
 ├── requirements.txt
@@ -224,6 +228,12 @@ python src/train_models.py
 python src/tune_hyperparams.py
 ```
 
+### Run historical ESPN backtest
+```bash
+python src/historical_backtest.py
+# Outputs: data/processed/backtest_results.csv, models/backtest_espn_scores.png
+```
+
 ### Run bracket predictions
 ```bash
 # With a bracket CSV
@@ -238,11 +248,12 @@ python run_2026.py --bracket data/raw/bracket_2026.csv --monte-carlo-trials 5000
 
 ### Bracket CSV format
 ```
-TEAM_ID,TEAM,SEED,REGION
+TEAM_NO,TEAM,SEED,REGION
 1234,Duke,1,South
 5678,Auburn,1,East
 ...
 ```
+`TEAM_NO` must match the `TEAM NO` column in `master_team_table.csv` for the target year.
 
 ---
 
@@ -257,6 +268,10 @@ TEAM_ID,TEAM,SEED,REGION
 **Recency weighting is unnecessary.** Optuna found optimal decay rates near 1.0 for all tree models, meaning older seasons are as informative as recent ones. KenPom/Barttorvik efficiency margins are already era-normalized, so 2012 data is genuinely comparable to 2024 data.
 
 **The realistic AUC ceiling for public-data tournament prediction is ~0.84–0.85.** Beyond that, you need private information (injury reports, line movement, scouting intel) that isn't available at bracket time.
+
+**ESPN bracket scoring reveals MLP as the top performer.** Walk-forward backtest across 10 years (2015–2025, excl. 2020) using ESPN scoring (R64=10 → Championship=320 pts, max 1,920/year): MLP averaged **985 pts/year** (best in 4 of 10 years), Random Forest 933 (best in 3), Ensemble 914 (best in 2), XGBoost 889 (best in 1), LightGBM 926, LR (seed) 870. Despite slightly lower AUC, MLP's probability distributions are better calibrated for the winner-picks-more-points scoring structure. The Ensemble Monte Carlo mean was ~650 pts/year — conservative spread costs ESPN points relative to picking definitive winners.
+
+**The 2021 VCU withdrawal is handled.** Oregon received an automatic bye into the Round of 32 after VCU withdrew due to COVID. The simulator detects this case and inserts a synthetic bye game to maintain the full 63-game bracket structure for scoring.
 
 ---
 
