@@ -7,7 +7,8 @@
     "n_estimators": 199,
     "max_depth": 4,
     "min_samples_leaf": 4,
-    "max_features": 0.5
+    "max_features": 0.5,
+    "decay_rate": 0.919598
   },
   "xgboost": {
     "n_estimators": 397,
@@ -18,7 +19,8 @@
     "gamma": 4.706223593833493,
     "min_child_weight": 4,
     "reg_alpha": 5.4541498697944375,
-    "reg_lambda": 0.0455398985473322
+    "reg_lambda": 0.0455398985473322,
+    "decay_rate": 0.997292
   },
   "lightgbm": {
     "n_estimators": 385,
@@ -29,14 +31,16 @@
     "colsample_bytree": 0.7175091218326058,
     "min_child_samples": 5,
     "reg_alpha": 3.9219146124224085,
-    "reg_lambda": 2.5475365041573195
+    "reg_lambda": 2.5475365041573195,
+    "decay_rate": 0.993848
   },
   "mlp": {
     "hidden_size": 16,
     "n_layers": 1,
     "dropout": 0.2177721323611982,
     "lr": 0.0001743844948527828,
-    "weight_decay": 0.001750464347325694
+    "weight_decay": 0.001750464347325694,
+    "decay_rate": 0.879598
   },
   "ensemble_rf_xgb_lgbm": {
     "components": [
