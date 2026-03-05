@@ -37,5 +37,20 @@
     "dropout": 0.2177721323611982,
     "lr": 0.0001743844948527828,
     "weight_decay": 0.001750464347325694
+  },
+  "ensemble_rf_xgb_lgbm": {
+    "components": [
+      "random_forest",
+      "xgboost",
+      "lightgbm"
+    ],
+    "weights": [
+      0.3333333333333333,
+      0.3333333333333333,
+      0.3333333333333333
+    ],
+    "combination": "average",
+    "cv_mean_auc": 0.8068,
+    "cv_std_auc": 0.0514
   }
 }
