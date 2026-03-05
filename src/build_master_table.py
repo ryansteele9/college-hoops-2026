@@ -1,82 +1,169 @@
 """
 Build master team table: one row per team per tournament year.
 Spine: KenPom Barttorvik.csv
-Lookups joined: Seed Results, Team Results, Conference Results
+
+PROG_, SEED_, and CONF_ aggregates are computed dynamically from
+Tournament Matchups.csv using only years strictly before each team's
+tournament year, eliminating the data leakage that occurred when
+joining all-time static lookup tables (Team/Seed/Conference Results.csv).
+
+For a team in year s:
+  PROG_*  = program history across all tournament appearances in years < s
+  SEED_*  = seed history across all teams with same seed in years < s
+  CONF_*  = conference history across all teams in same conf in years < s
+
 Output: data/processed/master_team_table.csv
 """
 
 import pandas as pd
+import numpy as np
 from pathlib import Path
 
-RAW = Path("data/raw")
+RAW       = Path("data/raw")
 PROCESSED = Path("data/processed")
 PROCESSED.mkdir(parents=True, exist_ok=True)
 
 # ── Step 1: Load files ──────────────────────────────────────────────────────
-kenpom   = pd.read_csv(RAW / "KenPom Barttorvik.csv")
-seed_res = pd.read_csv(RAW / "Seed Results.csv")
-team_res = pd.read_csv(RAW / "Team Results.csv")
-conf_res = pd.read_csv(RAW / "Conference Results.csv")
+kenpom       = pd.read_csv(RAW / "KenPom Barttorvik.csv")
+matchups_raw = pd.read_csv(RAW / "Tournament Matchups.csv")
 
 # ── Step 2: Build spine ─────────────────────────────────────────────────────
 SPINE_COLS = ["YEAR", "TEAM NO", "TEAM ID", "TEAM", "SEED", "ROUND", "CONF", "CONF ID"]
 spine = kenpom[SPINE_COLS].copy()
-
-# ── Step 3: Clean percentage columns ────────────────────────────────────────
-def clean_pct(series: pd.Series) -> pd.Series:
-    """Strip % sign, cast to float. Divide by 100 if the raw string had a % sign."""
-    s = series.astype(str).str.strip()
-    has_pct = s.str.endswith("%")
-    numeric = s.str.rstrip("%").str.strip().astype(float)
-    # Only divide rows that had a literal % sign
-    numeric = numeric.where(~has_pct, numeric / 100)
-    return numeric
-
-PCT_COLS = {
-    "seed_res": ["WIN%", "CHAMP%"],
-    "team_res": ["WIN%", "F4%", "CHAMP%"],
-    "conf_res": ["WIN%", "CHAMP%"],
-}
-
-for col in PCT_COLS["seed_res"]:
-    seed_res[col] = clean_pct(seed_res[col])
-
-for col in PCT_COLS["team_res"]:
-    team_res[col] = clean_pct(team_res[col])
-
-for col in PCT_COLS["conf_res"]:
-    conf_res[col] = clean_pct(conf_res[col])
-
-# ── Step 4: Prefix and prepare lookup tables ─────────────────────────────────
-
-def prefix_cols(df: pd.DataFrame, join_key: str, prefix: str) -> pd.DataFrame:
-    """Rename all columns except join_key with prefix."""
-    rename = {c: f"{prefix}{c}" for c in df.columns if c != join_key}
-    return df.rename(columns=rename)
-
-# Seed Results: join on SEED, prefix SEED_
-seed_lookup = prefix_cols(seed_res, "SEED", "SEED_")
-
-# Team Results: drop TEAM (conflicts with spine), join on TEAM ID, prefix PROG_
-team_res_clean = team_res.drop(columns=["TEAM"])
-team_lookup = prefix_cols(team_res_clean, "TEAM ID", "PROG_")
-
-# Conference Results: drop CONF ID (conflicts with spine), join on CONF, prefix CONF_
-conf_res_clean = conf_res.drop(columns=["CONF ID"])
-conf_lookup = prefix_cols(conf_res_clean, "CONF", "CONF_")
-
-# ── Step 5: Left-join all onto spine ─────────────────────────────────────────
 CONF_REMAP = {"P10": "P12", "SInd": "Slnd"}
 spine["CONF"] = spine["CONF"].replace(CONF_REMAP)
 
+# ── Step 3: Parse Tournament Matchups into per-team game results ─────────────
+# Each consecutive pair of rows (sorted by BY YEAR NO desc) is one game.
+m = matchups_raw.sort_values("BY YEAR NO", ascending=False).reset_index(drop=True)
+m["GAME_ID"] = m.index // 2
+m["SLOT"]    = m.index % 2   # 0 = Team A (higher BY YEAR NO), 1 = Team B
+
+ga = (m[m["SLOT"] == 0]
+      [["YEAR", "GAME_ID", "TEAM NO", "SEED", "SCORE", "CURRENT ROUND"]]
+      .rename(columns={"TEAM NO": "TNO_A", "SEED": "SEED_A",
+                       "SCORE": "SCORE_A", "CURRENT ROUND": "CUR_ROUND"}))
+gb = (m[m["SLOT"] == 1]
+      [["YEAR", "GAME_ID", "TEAM NO", "SEED", "SCORE"]]
+      .rename(columns={"TEAM NO": "TNO_B", "SEED": "SEED_B", "SCORE": "SCORE_B"}))
+
+games = ga.merge(gb, on=["YEAR", "GAME_ID"])
+games["A_WIN"] = (games["SCORE_A"] > games["SCORE_B"]).astype(int)
+games["B_WIN"] = 1 - games["A_WIN"]
+
+# Stack into one row per (team, game)
+rA = (games[["YEAR", "TNO_A", "SEED_A", "A_WIN", "CUR_ROUND"]]
+      .rename(columns={"TNO_A": "TEAM_NO", "SEED_A": "SEED", "A_WIN": "WIN"}))
+rB = (games[["YEAR", "TNO_B", "SEED_B", "B_WIN", "CUR_ROUND"]]
+      .rename(columns={"TNO_B": "TEAM_NO", "SEED_B": "SEED", "B_WIN": "WIN"}))
+game_records = pd.concat([rA, rB], ignore_index=True)
+
+# Round-achievement flags
+game_records["F4"]    = (game_records["CUR_ROUND"] <= 4).astype(int)
+game_records["CHAMP"] = ((game_records["CUR_ROUND"] == 2) & (game_records["WIN"] == 1)).astype(int)
+
+# Attach stable TEAM ID and CONF from kenpom (join on YEAR + TEAM_NO)
+team_id_map = (kenpom[["YEAR", "TEAM NO", "TEAM ID", "CONF"]].copy()
+               .rename(columns={"TEAM NO": "TEAM_NO"}))
+team_id_map["CONF"] = team_id_map["CONF"].replace(CONF_REMAP)
+game_records = game_records.merge(team_id_map, on=["YEAR", "TEAM_NO"], how="left")
+
+# ── Step 4: Compute per-(group, year) aggregate stats ───────────────────────
+
+# Program (TEAM ID) — one tournament appearance per year
+team_yr = (game_records.groupby(["YEAR", "TEAM ID"])
+           .agg(GAMES=("WIN", "count"),
+                W    =("WIN", "sum"),
+                F4   =("F4",  "max"),   # 1 if reached Final Four this year
+                CHAMP=("CHAMP","max"))  # 1 if won championship this year
+           .reset_index())
+team_yr["L"]   = team_yr["GAMES"] - team_yr["W"]
+team_yr["APP"] = 1  # one tournament appearance per row
+
+# Seed — aggregate all teams sharing this seed per year
+seed_yr = (game_records.groupby(["YEAR", "SEED"])
+           .agg(GAMES=("WIN",    "count"),
+                W    =("WIN",    "sum"),
+                CHAMP=("CHAMP",  "max"),
+                APP  =("TEAM_NO","nunique"))  # distinct teams appearing as this seed
+           .reset_index())
+seed_yr["L"] = seed_yr["GAMES"] - seed_yr["W"]
+
+# Conference — aggregate all conference teams per year
+conf_yr = (game_records.dropna(subset=["CONF"])
+           .groupby(["YEAR", "CONF"])
+           .agg(GAMES=("WIN",    "count"),
+                W    =("WIN",    "sum"),
+                CHAMP=("CHAMP",  "max"),
+                APP  =("TEAM_NO","nunique"))
+           .reset_index())
+conf_yr["L"] = conf_yr["GAMES"] - conf_yr["W"]
+
+# ── Step 5: Expanding prior-year cumulative sums ────────────────────────────
+# cumsum() includes the current year; subtracting the current year's value
+# gives the sum of all strictly prior years — leak-free.
+
+def add_prior_cumstats(df, group_col, stat_cols):
+    """Add prev_<col> = cumulative sum using only prior years per group."""
+    df = df.sort_values([group_col, "YEAR"]).copy()
+    for col in stat_cols:
+        cumsum = df.groupby(group_col)[col].cumsum()
+        df[f"prev_{col}"] = cumsum - df[col]
+    return df
+
+PROG_STATS = ["GAMES", "W", "L", "F4", "CHAMP", "APP"]
+SEED_STATS = ["GAMES", "W", "L", "CHAMP", "APP"]
+CONF_STATS = ["GAMES", "W", "L", "CHAMP", "APP"]
+
+team_yr = add_prior_cumstats(team_yr, "TEAM ID", PROG_STATS)
+seed_yr = add_prior_cumstats(seed_yr, "SEED",    SEED_STATS)
+conf_yr = add_prior_cumstats(conf_yr, "CONF",    CONF_STATS)
+
+# ── Step 6: Compute rate features ───────────────────────────────────────────
+
+def safe_div(a, b):
+    return np.where(b > 0, a / b, np.nan)
+
+# PROG_
+team_yr["PROG_GAMES"]  = team_yr["prev_GAMES"]
+team_yr["PROG_W"]      = team_yr["prev_W"]
+team_yr["PROG_L"]      = team_yr["prev_L"]
+team_yr["PROG_WIN%"]   = safe_div(team_yr["prev_W"],     team_yr["prev_GAMES"])
+team_yr["PROG_F4%"]    = safe_div(team_yr["prev_F4"],    team_yr["prev_APP"])
+team_yr["PROG_CHAMP%"] = safe_div(team_yr["prev_CHAMP"], team_yr["prev_APP"])
+
+# SEED_
+seed_yr["SEED_GAMES"]  = seed_yr["prev_GAMES"]
+seed_yr["SEED_W"]      = seed_yr["prev_W"]
+seed_yr["SEED_L"]      = seed_yr["prev_L"]
+seed_yr["SEED_WIN%"]   = safe_div(seed_yr["prev_W"],     seed_yr["prev_GAMES"])
+seed_yr["SEED_CHAMP%"] = safe_div(seed_yr["prev_CHAMP"], seed_yr["prev_APP"])
+
+# CONF_
+conf_yr["CONF_GAMES"]  = conf_yr["prev_GAMES"]
+conf_yr["CONF_W"]      = conf_yr["prev_W"]
+conf_yr["CONF_L"]      = conf_yr["prev_L"]
+conf_yr["CONF_WIN%"]   = safe_div(conf_yr["prev_W"],     conf_yr["prev_GAMES"])
+conf_yr["CONF_CHAMP%"] = safe_div(conf_yr["prev_CHAMP"], conf_yr["prev_APP"])
+
+# ── Step 7: Build slim lookup tables ────────────────────────────────────────
+PROG_FEAT = ["PROG_GAMES", "PROG_W", "PROG_L", "PROG_WIN%", "PROG_F4%", "PROG_CHAMP%"]
+SEED_FEAT = ["SEED_GAMES", "SEED_W", "SEED_L", "SEED_WIN%", "SEED_CHAMP%"]
+CONF_FEAT = ["CONF_GAMES", "CONF_W", "CONF_L", "CONF_WIN%", "CONF_CHAMP%"]
+
+prog_lookup = team_yr[["YEAR", "TEAM ID"] + PROG_FEAT]
+seed_lookup = seed_yr[["YEAR", "SEED"]    + SEED_FEAT]
+conf_lookup = conf_yr[["YEAR", "CONF"]    + CONF_FEAT]
+
+# ── Step 8: Join onto spine ──────────────────────────────────────────────────
 master = (
     spine
-    .merge(seed_lookup, on="SEED",    how="left")
-    .merge(team_lookup, on="TEAM ID", how="left")
-    .merge(conf_lookup, on="CONF",    how="left")
+    .merge(prog_lookup, on=["YEAR", "TEAM ID"], how="left")
+    .merge(seed_lookup, on=["YEAR", "SEED"],    how="left")
+    .merge(conf_lookup, on=["YEAR", "CONF"],    how="left")
 )
 
-# ── Step 6: Save and report ──────────────────────────────────────────────────
+# ── Step 9: Save and report ──────────────────────────────────────────────────
 out_path = PROCESSED / "master_team_table.csv"
 master.to_csv(out_path, index=False)
 
@@ -92,6 +179,14 @@ else:
     print(f"Null counts per column ({len(null_counts)} columns with nulls):")
     print(null_counts.to_string())
 
-# Dtype summary
+# Sanity check: earliest year should have all NaN PROG_ features (no prior data)
+earliest = master["YEAR"].min()
+prog_nan = master.loc[master["YEAR"] == earliest, "PROG_WIN%"].isna().all()
+print(f"\nSanity check: PROG_WIN% is all NaN for earliest year {earliest}: {prog_nan}")
+
+# Show a sample of PROG_WIN% across years (should increase with more history)
+print("\nMedian PROG_WIN% by year (should be NaN for first, then stabilize):")
+print(master.groupby("YEAR")["PROG_WIN%"].median().to_string())
+
 print("\nDtype counts:")
 print(master.dtypes.value_counts().to_string())
