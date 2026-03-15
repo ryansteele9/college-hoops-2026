@@ -144,6 +144,19 @@ for col in diff_cols:
 mirror["TEAM_A_WIN"] = 1 - games["TEAM_A_WIN"]
 
 dataset = pd.concat([games, mirror], ignore_index=True)
+
+# ── Style clash interaction terms ─────────────────────────────────────────
+# Computed after concat so mirrored rows (swapped A/B) are handled correctly.
+if "THREES SHARE_A" in dataset.columns:
+    dataset["STYLE_CLASH_3PT"] = (
+        (dataset["THREES SHARE_A"] - dataset["THREES SHARE_B"])
+        * dataset["THREES FG%D_B"]
+    )
+    dataset["STYLE_CLASH_RIM"] = (
+        (dataset["CLOSE TWOS SHARE_A"] - dataset["CLOSE TWOS SHARE_B"])
+        * dataset["DUNKS FG%D_B"]
+    )
+
 dataset = dataset.sort_values(["YEAR", "GAME_ID"]).reset_index(drop=True)
 
 # ── Save ──────────────────────────────────────────────────────────────────────

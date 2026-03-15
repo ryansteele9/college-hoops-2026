@@ -186,6 +186,45 @@ def make_predictor(bundle):
             with torch.no_grad():
                 return float(net(torch.tensor(X, dtype=torch.float32)).squeeze())
 
+    elif mt == "ensemble_with_mlp":
+        # Hybrid ensemble: MLP (0.5 weight) + tree models (0.5 weight split evenly)
+        mlp_imp  = bundle["mlp_imputer"]
+        mlp_sc   = bundle["mlp_scaler"]
+        mlp_np   = bundle["mlp_net_params"]
+        mlp_net  = build_mlp(bundle["mlp_n_features"], mlp_np["hidden_size"],
+                             mlp_np["n_layers"], mlp_np["dropout"])
+        mlp_net.load_state_dict(bundle["mlp_state_dict"])
+        mlp_net.eval()
+        mlp_w    = bundle["mlp_weight"]
+        t_imp    = bundle["tree_imputer"]
+        t_wts    = bundle["tree_weights"]
+        t_mds    = list(bundle["tree_models"].values())
+
+        def pred(fa, fb):
+            X = np.array([[fa.get(f, np.nan) - fb.get(f, np.nan) for f in RAW_FEATS]],
+                         dtype=np.float32)
+            _patch_seed_feats(X, int(fa.get("_SEED", 8)), int(fb.get("_SEED", 8)))
+            X_ti = t_imp.transform(X)
+            X_ms = mlp_sc.transform(mlp_imp.transform(X))
+            p_tree = sum(w * float(m.predict_proba(X_ti)[:, 1][0])
+                         for m, w in zip(t_mds, t_wts))
+            with torch.no_grad():
+                p_mlp = float(mlp_net(torch.tensor(X_ms, dtype=torch.float32)).squeeze())
+            return mlp_w * p_mlp + p_tree
+
+        def batch_pred(X_diffs: np.ndarray) -> np.ndarray:
+            """Seed matchup features must be pre-patched by caller."""
+            X32   = X_diffs.astype(np.float32)
+            X_ti  = t_imp.transform(X32)
+            X_ms  = mlp_sc.transform(mlp_imp.transform(X32))
+            p_tree = sum(w * m.predict_proba(X_ti)[:, 1]
+                         for m, w in zip(t_mds, t_wts))
+            with torch.no_grad():
+                p_mlp = mlp_net(torch.tensor(X_ms, dtype=torch.float32)).squeeze().numpy()
+            return mlp_w * p_mlp + p_tree
+
+        pred.batch_predict = batch_pred
+
     else:
         raise ValueError(f"Unknown model_type: {mt}")
 

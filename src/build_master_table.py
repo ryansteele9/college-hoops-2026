@@ -254,6 +254,14 @@ resumes["RES BID TYPE AUTO"] = (resumes["BID TYPE"] == "Auto").astype(int)
 resumes = resumes.drop(columns="BID TYPE")
 master = master.merge(resumes, on=["YEAR", "TEAM NO"], how="left")
 
+# ── Step 8h: Shooting Splits ──────────────────────────────────────────────
+ss = pd.read_csv(RAW / "Shooting Splits.csv",
+                 usecols=["YEAR", "TEAM NO",
+                           "THREES SHARE", "THREES FG%", "THREES FG%D",
+                           "CLOSE TWOS SHARE", "CLOSE TWOS FG%",
+                           "DUNKS SHARE", "DUNKS FG%D"])
+master = master.merge(ss, on=["YEAR", "TEAM NO"], how="left")
+
 # ── Step 9: Save and report ──────────────────────────────────────────────────
 out_path = PROCESSED / "master_team_table.csv"
 master.to_csv(out_path, index=False)
