@@ -3,7 +3,7 @@ run_2026.py — 2026 NCAA Tournament Prediction Entry Point
 
 Usage:
     python run_2026.py --bracket data/raw/bracket_2026.csv
-    python run_2026.py --bracket data/raw/bracket_2026.csv --monte-carlo-trials 10000
+    python run_2026.py --bracket data/raw/bracket_2026.csv --monte-carlo-trials 100000
     python run_2026.py  # uses 2025 sample bracket for validation
 
 Bracket CSV format:
@@ -134,7 +134,7 @@ def main():
         help="Path to bracket CSV. Omit to use 2025 sample for validation.",
     )
     parser.add_argument(
-        "--monte-carlo-trials", type=int, default=10_000,
+        "--monte-carlo-trials", type=int, default=100_000,
         metavar="N",
         help="Number of Monte Carlo trials for round probabilities (default: 10000)",
     )

@@ -387,7 +387,7 @@ def run_deterministic(bracket: dict, predictors: dict, verbose: bool = True) -> 
 
 
 def run_monte_carlo(bracket: dict, ens_predictor,
-                    n_trials: int = 10_000, verbose: bool = True) -> pd.DataFrame:
+                    n_trials: int = 100_000, verbose: bool = True) -> pd.DataFrame:
     """
     Monte Carlo simulation using a precomputed win-probability matrix.
 
@@ -546,7 +546,7 @@ def main():
         description="NCAA tournament bracket simulator")
     parser.add_argument("--bracket", default=None,
                         help="Path to bracket CSV (default: 2025 sample)")
-    parser.add_argument("--monte-carlo-trials", type=int, default=10_000)
+    parser.add_argument("--monte-carlo-trials", type=int, default=100_000)
     args = parser.parse_args()
 
     t0 = time.time()
