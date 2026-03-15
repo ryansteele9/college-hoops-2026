@@ -64,7 +64,7 @@ for fi, s in enumerate(FOLD_YEARS):
     y_train = train_df[TARGET].values
     y_test  = test_df[TARGET].values
 
-    imp = SimpleImputer(strategy="median").fit(X_train)
+    imp = SimpleImputer(strategy="median", keep_empty_features=True).fit(X_train)
     Xtr = imp.transform(X_train)
     Xte = imp.transform(X_test)
 
@@ -192,7 +192,7 @@ for s in FOLD_YEARS:
         X_train = train_df[cols].values.astype(np.float32)
         X_test  = test_df[cols].values.astype(np.float32)
         y_train = train_df[TARGET].values
-        imp = SimpleImputer(strategy="median").fit(X_train)
+        imp = SimpleImputer(strategy="median", keep_empty_features=True).fit(X_train)
         rf  = RandomForestClassifier(n_estimators=500, max_depth=8,
                                      min_samples_leaf=10, random_state=42, n_jobs=-1)
         rf.fit(imp.transform(X_train), y_train)

@@ -67,11 +67,11 @@
     }
   },
   "mlp": {
-    "hidden_size": 16,
-    "n_layers": 3,
-    "dropout": 0.3257974798910953,
-    "lr": 0.0012920764337812113,
-    "weight_decay": 2.8276106161857495e-05,
+    "hidden_size": 64,
+    "n_layers": 1,
+    "dropout": 0.09170225492671691,
+    "lr": 8.17949947521167e-05,
+    "weight_decay": 0.0001256104370001356,
     "decay_rate": 0.879598,
     "calibration": {
       "ece_before": 0.0736,

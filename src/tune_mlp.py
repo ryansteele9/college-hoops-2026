@@ -35,7 +35,7 @@ PROCESSED  = Path("data/processed")
 MODELS     = Path("models")
 FOLD_YEARS = [y for y in range(2015, 2026) if y != 2020]
 TARGET     = "TEAM_A_WIN"
-N_TRIALS   = 50
+N_TRIALS   = 30
 
 # ── Load data ─────────────────────────────────────────────────────────────────
 df       = pd.read_csv(PROCESSED / "matchup_dataset.csv")
@@ -116,7 +116,7 @@ def wf_auc_mlp(hidden, n_layers, dropout, lr, wd, dedup=False):
         y_val = tr.loc[val_mask, TARGET].values
         y_te  = te[TARGET].values
 
-        imp = SimpleImputer(strategy="median").fit(X_fit)
+        imp = SimpleImputer(strategy="median", keep_empty_features=True).fit(X_fit)
         sc  = StandardScaler().fit(imp.transform(X_fit))
 
         Xfit_sc = sc.transform(imp.transform(X_fit))
@@ -214,4 +214,38 @@ params_path = MODELS / "best_params.json"
 with open(params_path, "w") as f:
     json.dump(params, f, indent=2)
 print(f"\nUpdated {params_path}  (MLP params only; LR/RF/XGB/LGB unchanged)")
-print("\nNext: run  python src/historical_backtest.py  for updated ESPN scores.")
+
+
+# ── Retrain MLP on full dataset and resave pkl ────────────────────────────────
+import joblib
+
+print("\nRetraining MLP on full dataset and saving mlp_calibrated.pkl...")
+
+val_yr    = 2024
+fit_mask  = df["YEAR"] != val_yr
+val_mask  = df["YEAR"] == val_yr
+
+X_fit_all = df.loc[fit_mask, selected].values.astype(np.float32)
+X_val_all = df.loc[val_mask, selected].values.astype(np.float32)
+y_fit_all = df.loc[fit_mask, TARGET].values
+y_val_all = df.loc[val_mask, TARGET].values
+
+imp_final = SimpleImputer(strategy="median", keep_empty_features=True).fit(X_fit_all)
+sc_final  = StandardScaler().fit(imp_final.transform(X_fit_all))
+Xfit_sc_f = sc_final.transform(imp_final.transform(X_fit_all))
+Xval_sc_f = sc_final.transform(imp_final.transform(X_val_all))
+
+net_final = train_mlp_fold(Xfit_sc_f, y_fit_all, Xval_sc_f, y_val_all,
+                            p_new["hidden_size"], p_new["n_layers"],
+                            p_new["dropout"], p_new["lr"], p_new["weight_decay"])
+
+joblib.dump({
+    "model_type":     "mlp",
+    "net_state_dict": net_final.state_dict(),
+    "net_params":     {k: p_new[k] for k in ["hidden_size", "n_layers", "dropout"]},
+    "n_features":     len(selected),
+    "imputer":        imp_final,
+    "scaler":         sc_final,
+    "features":       selected,
+}, MODELS / "mlp_calibrated.pkl")
+print("  Saved: mlp_calibrated.pkl")

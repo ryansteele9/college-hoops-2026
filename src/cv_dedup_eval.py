@@ -125,13 +125,13 @@ for s in FOLD_YEARS:
     y_te_dd = te_dd[TARGET].values
 
     # Tree imputer (full train window)
-    imp     = SimpleImputer(strategy="median").fit(X_tr)
+    imp     = SimpleImputer(strategy="median", keep_empty_features=True).fit(X_tr)
     Xtr_i   = imp.transform(X_tr)
     Xte_i   = imp.transform(X_te)
     Xte_i_dd = imp.transform(X_te_dd)
 
     # MLP imputer + scaler (fit split only)
-    imp_fit  = SimpleImputer(strategy="median").fit(X_fit)
+    imp_fit  = SimpleImputer(strategy="median", keep_empty_features=True).fit(X_fit)
     sc_fit   = StandardScaler().fit(imp_fit.transform(X_fit))
     Xfit_sc  = sc_fit.transform(imp_fit.transform(X_fit))
     Xval_sc  = sc_fit.transform(imp_fit.transform(X_val))
@@ -142,7 +142,7 @@ for s in FOLD_YEARS:
     X_seed_tr = tr[["DIFF_SEED"]].values.astype(np.float32)
     X_seed_te = te[["DIFF_SEED"]].values.astype(np.float32)
     X_seed_dd = te_dd[["DIFF_SEED"]].values.astype(np.float32)
-    imp_seed  = SimpleImputer(strategy="median").fit(X_seed_tr)
+    imp_seed  = SimpleImputer(strategy="median", keep_empty_features=True).fit(X_seed_tr)
     p_lr = model_params(params["logistic_regression"])
     lr   = LogisticRegression(C=p_lr["C"], penalty=p_lr["penalty"],
                               solver="liblinear", max_iter=1000, random_state=42)

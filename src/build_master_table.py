@@ -179,6 +179,81 @@ master = (
     .merge(conf_lookup,  on=["YEAR", "CONF"],    how="left")
 )
 
+# ── Step 8b: Barttorvik Away-Neutral ─────────────────────────────────────────
+b_neutral = pd.read_csv(RAW / "Barttorvik Away-Neutral.csv",
+                        usecols=["YEAR", "TEAM NO", "BADJ EM", "BADJ O", "BADJ D",
+                                  "BARTHAG", "EFG%", "EFG%D"])
+b_neutral = b_neutral.rename(columns={
+    "BADJ EM": "NEUTRAL BADJ EM", "BADJ O": "NEUTRAL BADJ O",
+    "BADJ D": "NEUTRAL BADJ D",  "BARTHAG": "NEUTRAL BARTHAG",
+    "EFG%":  "NEUTRAL EFG%",     "EFG%D":  "NEUTRAL EFG%D",
+})
+master = master.merge(b_neutral, on=["YEAR", "TEAM NO"], how="left")
+
+# ── Step 8c: Teamsheet Ranks ──────────────────────────────────────────────────
+teamsheet = pd.read_csv(RAW / "Teamsheet Ranks.csv",
+                        usecols=["YEAR", "TEAM NO", "QUALITY AVG", "RESUME AVG",
+                                  "Q1A W", "Q1 W", "Q2 W", "Q3 L", "Q4 L"])
+teamsheet = teamsheet.rename(columns={
+    "Q1A W": "TS Q1A W", "Q1 W": "TS Q1 W", "Q2 W": "TS Q2 W",
+    "Q3 L":  "TS Q3 L",  "Q4 L": "TS Q4 L",
+})
+master = master.merge(teamsheet, on=["YEAR", "TEAM NO"], how="left")
+
+# ── Step 8d: TeamRankings ─────────────────────────────────────────────────────
+tr = pd.read_csv(RAW / "TeamRankings.csv",
+                 usecols=["YEAR", "TEAM NO", "TR RATING", "LAST", "HI", "LO",
+                           "CONSISTENCY TR RATING", "LUCK RATING"])
+tr = tr.rename(columns={
+    "LAST": "TR LAST", "HI": "TR HI", "LO": "TR LO",
+    "CONSISTENCY TR RATING": "TR CONSISTENCY", "LUCK RATING": "TR LUCK",
+})
+master = master.merge(tr, on=["YEAR", "TEAM NO"], how="left")
+
+tr_neutral = pd.read_csv(RAW / "TeamRankings Neutral.csv",
+                          usecols=["YEAR", "TEAM NO", "TR RATING", "LAST"])
+tr_neutral = tr_neutral.rename(columns={
+    "TR RATING": "TR NEUTRAL RATING", "LAST": "TR NEUTRAL LAST"
+})
+master = master.merge(tr_neutral, on=["YEAR", "TEAM NO"], how="left")
+
+master["PEAK DECLINE"] = master["TR HI"]   - master["TR LAST"]
+master["RECOVERY"]     = master["TR LAST"] - master["TR LO"]
+
+# ── Step 8e: Preseason trajectory ────────────────────────────────────────────
+preseason = pd.read_csv(RAW / "KenPom Preseason.csv",
+                         usecols=["YEAR", "TEAM NO", "KADJ EM CHANGE", "KADJ EM RANK CHANGE"])
+master = master.merge(preseason, on=["YEAR", "TEAM NO"], how="left")
+
+rppf_pre = pd.read_csv(RAW / "RPPF Preseason Ratings.csv",
+                        usecols=["YEAR", "TEAM NO", "RPPF RATING CHANGE"])
+master = master.merge(rppf_pre, on=["YEAR", "TEAM NO"], how="left")
+
+# ── Step 8f: Tournament location ──────────────────────────────────────────────
+loc = pd.read_csv(RAW / "Tournament Locations.csv",
+                  usecols=["YEAR", "TEAM NO", "CURRENT ROUND",
+                            "DISTANCE (MI)", "TIME ZONES CROSSED", "TIME ZONES CROSSED VALUE"])
+loc_r64 = loc[loc["CURRENT ROUND"] == 64].drop(columns="CURRENT ROUND")
+loc_r64 = loc_r64.rename(columns={
+    "DISTANCE (MI)":            "LOC DISTANCE MI",
+    "TIME ZONES CROSSED":       "LOC TIME ZONES CROSSED",
+    "TIME ZONES CROSSED VALUE": "LOC TIME ZONES CROSSED VALUE",
+})
+loc_r64["PROXIMITY ADVANTAGE"] = loc_r64["LOC DISTANCE MI"].apply(
+    lambda d: 1 if d < 1000 else (-1 if d > 1000 else 0)
+).astype(int)
+master = master.merge(loc_r64, on=["YEAR", "TEAM NO"], how="left")
+
+# ── Step 8g: Resumes ──────────────────────────────────────────────────────────
+resumes = pd.read_csv(RAW / "Resumes.csv",
+                      usecols=["YEAR", "TEAM NO", "Q1 W", "Q3 Q4 L", "R SCORE", "BID TYPE"])
+resumes = resumes.rename(columns={
+    "Q1 W": "RES Q1 W", "Q3 Q4 L": "RES Q3 Q4 L", "R SCORE": "RES R SCORE"
+})
+resumes["RES BID TYPE AUTO"] = (resumes["BID TYPE"] == "Auto").astype(int)
+resumes = resumes.drop(columns="BID TYPE")
+master = master.merge(resumes, on=["YEAR", "TEAM NO"], how="left")
+
 # ── Step 9: Save and report ──────────────────────────────────────────────────
 out_path = PROCESSED / "master_team_table.csv"
 master.to_csv(out_path, index=False)

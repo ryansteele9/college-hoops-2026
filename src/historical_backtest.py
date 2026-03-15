@@ -440,9 +440,9 @@ for year in FOLD_YEARS:
     X_seed_tr = tr[["DIFF_SEED"]].values.astype(np.float32)
 
     # ── Imputers / scalers ───────────────────────────────────────────────────
-    imp      = SimpleImputer(strategy="median").fit(X_tr)
-    imp_seed = SimpleImputer(strategy="median").fit(X_seed_tr)
-    imp_fit  = SimpleImputer(strategy="median").fit(X_fit)
+    imp      = SimpleImputer(strategy="median", keep_empty_features=True).fit(X_tr)
+    imp_seed = SimpleImputer(strategy="median", keep_empty_features=True).fit(X_seed_tr)
+    imp_fit  = SimpleImputer(strategy="median", keep_empty_features=True).fit(X_fit)
     sc_fit   = StandardScaler().fit(imp_fit.transform(X_fit))
 
     Xtr_imp  = imp.transform(X_tr)
