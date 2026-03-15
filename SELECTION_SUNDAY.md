@@ -43,7 +43,7 @@ These two scripts read `data/raw/` and produce the processed files the models ne
 python src/build_master_table.py
 ```
 
-Expected output: `master_team_table.csv written — 1147 rows, 107 cols` (or similar).
+Expected output: `master_team_table.csv written — 1147 rows, 114 cols` (or similar).
 
 ```bash
 python src/build_matchup_dataset.py
@@ -93,6 +93,21 @@ This will:
 - Run 100,000-trial Monte Carlo simulation (~7 seconds)
 - Print a game-by-game bracket tree for the Ensemble model
 - Print round probabilities for all 64 teams
+
+### Model performance reference
+
+Walk-forward ESPN backtest average (2015–2025, excl. 2020):
+
+| Model | ESPN avg/yr | Notes |
+|-------|-------------|-------|
+| MLP | 1069 | Best in upset-heavy years |
+| **Ensemble (RF+XGB+LGB)** | **1055** | **Primary recommendation — best overall** |
+| XGBoost | 1027 | |
+| Random Forest | 1008 | |
+| LightGBM | 999 | |
+| LR (seed baseline) | 870 | Seed-only, no features |
+
+**Which model to use for your bracket:** The Ensemble is the primary recommendation and historically the most consistent performer. In chalk/favorite-dominant tournaments it tends to outperform all other models. In upset-heavy tournaments, MLP has historically been the stronger bracket pick — if you expect a chaotic field, consider weighting MLP's champion and Final Four picks more heavily alongside the Ensemble.
 
 ---
 
@@ -158,7 +173,7 @@ All output files are saved to `data/processed/simulator_outputs/`.
 
 ### "Feature mismatch" or shape error when running predictions
 
-The saved models expect exactly 31 features. This error means the feature tables were rebuilt but the models were not retrained to match.
+The saved models expect exactly 36 features. This error means the feature tables were rebuilt but the models were not retrained to match.
 
 Fix:
 ```bash
@@ -242,7 +257,7 @@ Use this section if the Kaggle dataset does not yet have 2026 data for one or mo
 
 - `Tournament Matchups.csv` — historical game results through 2025 are already in the repo. The pipeline computes PROG_W, CONF_WIN%, and SEED_MATCHUP_UPSET_RATE from this file using only prior-year data, so no 2026 rows are needed until after the tournament concludes.
 - `TeamRankings Neutral.csv` — used to build TR NEUTRAL RATING / TR NEUTRAL LAST, but neither of those made the final 31 features. Update it if you like, but it will not affect predictions.
-- `Teamsheet Ranks.csv` — no Teamsheet columns appear in the 31 selected features. Skip it.
+- `Teamsheet Ranks.csv` — no Teamsheet columns appear in the 36 selected features. Skip it.
 
 ---
 
@@ -302,7 +317,7 @@ Columns the pipeline reads:
 | `BADJ O` | NEUTRAL BADJ O | DIFF_NEUTRAL BADJ O |
 | `EFG%D` | NEUTRAL EFG%D | DIFF_NEUTRAL EFG%D |
 
-Only these five columns matter. The pipeline renames them on load; the CSV itself must keep the original names.
+Only these four columns matter. The pipeline renames them on load; the CSV itself must keep the original names.
 
 #### 1c. RPPF Preseason Ratings.csv — 1 feature
 
@@ -413,7 +428,7 @@ Column the pipeline reads (only `CURRENT ROUND = 64` rows are used):
 
 For LOC DISTANCE MI, use any online distance calculator between the team's city and the game city. Straight-line distance (not driving) is what the existing data uses — Google Maps "as the crow flies" works.
 
-The other location columns (TIME ZONES CROSSED, TIME ZONES CROSSED VALUE, etc.) are present in the file but did not make the 31 selected features. You only need DISTANCE (MI) to be accurate.
+The other location columns (TIME ZONES CROSSED, TIME ZONES CROSSED VALUE, etc.) are present in the file but did not make the 36 selected features. You only need DISTANCE (MI) to be accurate.
 
 ---
 
