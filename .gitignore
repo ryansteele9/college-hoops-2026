@@ -1,0 +1,22 @@
+﻿# Virtual environment
+venv/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.env
+*.egg-info/
+dist/
+build/
+.ipynb_checkpoints/
+
+# Project specific
+data/raw/
+data/processed/
+models/
+*.csv
+*.pkl
+*.joblib
+*.pt
