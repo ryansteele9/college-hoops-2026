@@ -47,6 +47,12 @@ from bracket_simulator import (
     run_monte_carlo,
     OUT_DIR,
 )
+from injury_adjustments import (
+    load_adjustments,
+    wrap_predictor,
+    print_summary as print_injury_summary,
+    print_delta_table,
+)
 
 
 # ── Enhanced console output ────────────────────────────────────────────────────
@@ -146,6 +152,15 @@ def main():
         "--bracket-tree", action="store_true",
         help="Print game-by-game bracket tree for the Ensemble model",
     )
+    parser.add_argument(
+        "--injuries",
+        nargs="?",
+        const="data/raw/injuries_2026.csv",
+        default=None,
+        metavar="CSV",
+        help="Apply injury adjustments. Optionally specify CSV path "
+             "(default: data/raw/injuries_2026.csv).",
+    )
     args = parser.parse_args()
 
     # ── Load models ──────────────────────────────────────────────────────────
@@ -203,6 +218,34 @@ def main():
 
     if args.full_table:
         print_mc_detail(mc_df, args.monte_carlo_trials)
+
+    if args.injuries:
+        # ── Load & display injury adjustments ────────────────────────────────
+        team_adj, detail_rows = load_adjustments(args.injuries)
+        print_injury_summary(detail_rows, team_adj)
+
+        # ── Adjusted deterministic (all 6 models) ────────────────────────────
+        print("\nRunning injury-adjusted deterministic simulations (all 6 models)...")
+        adj_predictors = {name: wrap_predictor(pred, team_adj)
+                          for name, pred in predictors.items()}
+        det_adj = run_deterministic(bracket, adj_predictors, verbose=True,
+                                    out_suffix="_adjusted")
+
+        # ── Adjusted Monte Carlo ──────────────────────────────────────────────
+        print(f"\nRunning injury-adjusted Monte Carlo "
+              f"({args.monte_carlo_trials:,} trials, Ensemble)...")
+        mc_adj_df = run_monte_carlo(
+            bracket,
+            predictors["Ensemble"],       # unwrapped — adjustments handled via team_adjustments
+            n_trials=args.monte_carlo_trials,
+            verbose=True,
+            team_adjustments=team_adj,
+            out_suffix="_adjusted",
+        )
+
+        # ── Adjusted summary + delta table ────────────────────────────────────
+        print_summary(det_adj, mc_adj_df, args.monte_carlo_trials)
+        print_delta_table(mc_df, mc_adj_df, team_adj)
 
     print()
     print("=" * 70)

@@ -234,6 +234,7 @@ def build_bracket(bracket_df: pd.DataFrame, lookup: dict) -> dict:
             yr  = int(row.get("YEAR", 2026))
             fts = get_team_features(tn, yr, lookup)
             fts["_SEED"] = int(row["SEED"])   # used by LR predictor
+            fts["_TEAM"] = str(row["TEAM"])
             teams.append({
                 "team_no": tn,
                 "team":    str(row["TEAM"]),
@@ -365,7 +366,8 @@ def simulate_tournament(bracket: dict, predictor, stochastic: bool):
 
 
 # ── High-level simulation runners ─────────────────────────────────────────────
-def run_deterministic(bracket: dict, predictors: dict, verbose: bool = True) -> dict:
+def run_deterministic(bracket: dict, predictors: dict, verbose: bool = True,
+                      out_suffix: str = "") -> dict:
     """
     Run deterministic simulation for all models.
     Returns {model_name: (game_log_df, champion_dict)}.
@@ -377,7 +379,7 @@ def run_deterministic(bracket: dict, predictors: dict, verbose: bool = True) -> 
         game_log, champ = simulate_tournament(b, predictor, stochastic=False)
         log_df = pd.DataFrame(game_log)
         safe  = name.replace(" ", "_").replace("(", "").replace(")", "")
-        path  = OUT_DIR / f"deterministic_{safe}.csv"
+        path  = OUT_DIR / f"deterministic_{safe}{out_suffix}.csv"
         log_df.to_csv(path, index=False)
         det_results[name] = (log_df, champ)
         if verbose:
@@ -387,7 +389,8 @@ def run_deterministic(bracket: dict, predictors: dict, verbose: bool = True) -> 
 
 
 def run_monte_carlo(bracket: dict, ens_predictor,
-                    n_trials: int = 100_000, verbose: bool = True) -> pd.DataFrame:
+                    n_trials: int = 100_000, verbose: bool = True,
+                    team_adjustments=None, out_suffix: str = "") -> pd.DataFrame:
     """
     Monte Carlo simulation using a precomputed win-probability matrix.
 
@@ -435,6 +438,11 @@ def run_monte_carlo(bracket: dict, ens_predictor,
             for j, tb in enumerate(all_teams):
                 if i != j:
                     prob_matrix[i, j] = ens_predictor(ta["feats"], tb["feats"])
+
+    if team_adjustments:
+        from injury_adjustments import adjust_prob_matrix
+        team_names_list = [t["team"] for t in all_teams]
+        prob_matrix = adjust_prob_matrix(prob_matrix, team_names_list, team_adjustments)
 
     if verbose:
         print(f"  Matrix built in {time.time()-t0:.1f}s", flush=True)
@@ -505,7 +513,7 @@ def run_monte_carlo(bracket: dict, ens_predictor,
         rows.append(row)
 
     mc_df = pd.DataFrame(rows).sort_values(["CHAMP", "F2"], ascending=False)
-    mc_path = OUT_DIR / "montecarlo_probs.csv"
+    mc_path = OUT_DIR / f"montecarlo_probs{out_suffix}.csv"
     mc_df.to_csv(mc_path, index=False)
     if verbose:
         print(f"  Monte Carlo complete in {time.time()-t0:.1f}s  ->  {mc_path}")
