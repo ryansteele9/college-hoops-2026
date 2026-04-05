@@ -166,7 +166,12 @@ barto_keep = {k: v for k, v in BARTO_COLS.items() if k in barto.columns}
 df = barto[list(barto_keep.keys())].rename(columns=barto_keep).copy()
 df["YEAR"] = 2026
 
-# Fill TEAM NO and SEED from bracket where missing
+# Verify all 64 bracket teams are present in barto
+missing_from_barto = set(bracket["TEAM"]) - set(df["TEAM"])
+if missing_from_barto:
+    raise ValueError(f"Teams in bracket but missing from barttorvik_2026_mapped: {missing_from_barto}")
+
+# Fill TEAM NO and SEED from bracket (overwrite any existing values)
 for _, br in bracket.iterrows():
     mask = df["TEAM"] == br["TEAM"]
     if mask.any():
@@ -174,7 +179,13 @@ for _, br in bracket.iterrows():
         df.loc[mask, "SEED"] = br["SEED"]
         df.loc[mask, "ROUND"] = 1
 
-print(f"Base rows: {len(df)} (barttorvik_2026_mapped)")
+# Verify no TEAM_NO=0 collisions
+zero_count = (df["TEAM NO"] == 0).sum()
+if zero_count > 0:
+    raise ValueError(f"{zero_count} teams still have TEAM_NO=0; update bracket_2026.csv")
+
+assert len(df) == 64, f"Expected 64 rows, got {len(df)}"
+print(f"Base rows: {len(df)} (barttorvik_2026_mapped), all TEAM_NOs unique: {df['TEAM NO'].nunique() == 64}")
 
 
 # ──────────────────────────────────────────────────────────────

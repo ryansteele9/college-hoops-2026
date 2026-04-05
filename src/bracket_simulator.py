@@ -11,7 +11,7 @@ Bracket CSV columns:
     TEAM_NO   — integer matching master_team_table "TEAM NO"
     TEAM      — display name
     SEED      — integer 1-16
-    REGION    — string (4 distinct regions; F4 pairs regions[0]/[1] and [2]/[3])
+    REGION    — string (East/West/South/Midwest; F4 pairs East vs South and West vs Midwest)
     YEAR      — season whose features to use (optional; defaults to most recent)
 
 Outputs (data/processed/simulator_outputs/):
@@ -91,6 +91,8 @@ SEED_BRACKET_ORDER = [1, 16, 8, 9, 5, 12, 4, 13, 6, 11, 3, 14, 7, 10, 2, 15]
 ROUND_NAMES = {64: "R64", 32: "R32", 16: "S16", 8: "E8", 4: "F4", 2: "F2", 1: "CHAMP"}
 ROUND_LIST  = ["R64", "R32", "S16", "E8", "F4", "F2", "CHAMP"]
 MODEL_KEYS  = ["LR (seed)", "Random Forest", "XGBoost", "LightGBM", "MLP", "Ensemble"]
+# NCAA Final Four region pairings: East vs South, West vs Midwest
+F4_REGION_PAIRS = [("East", "South"), ("West", "Midwest")]
 
 
 # ── MLP architecture (must match training) ────────────────────────────────────
@@ -368,10 +370,11 @@ def simulate_tournament(bracket: dict, predictor, stochastic: bool):
         champ = simulate_region(bracket[region], predictor, stochastic, game_log)
         regional_champs.append(champ)
 
-    # Final Four: pair (0,1) and (2,3)
+    # Final Four: East vs South, West vs Midwest
+    champ_by_region = {c["region"]: c for c in regional_champs}
     finalists = []
-    for i in range(0, 4, 2):
-        ta, tb = regional_champs[i], regional_champs[i + 1]
+    for r1, r2 in F4_REGION_PAIRS:
+        ta, tb = champ_by_region[r1], champ_by_region[r2]
         p = predictor(ta["feats"], tb["feats"])
         winner, loser = play_game(ta, tb, p, stochastic)
         if game_log is not None:
@@ -488,6 +491,7 @@ def run_monte_carlo(bracket: dict, ens_predictor,
 
     # ── Build per-region seeding order (list of 4 × 16 team indices) ─────────
     regions = list(bracket.keys())
+    region_to_idx = {r: i for i, r in enumerate(regions)}
     seeded_regions = []
     for region in regions:
         ordered = sorted(bracket[region],
@@ -522,10 +526,11 @@ def run_monte_carlo(bracket: dict, ens_predictor,
                 current = nxt
             regional_champs.append(current[0])
 
-        # Final Four → 2 finalists
+        # Final Four: East vs South, West vs Midwest
         finalists = []
-        for k in range(0, 4, 2):
-            a, b = regional_champs[k], regional_champs[k + 1]
+        for r1, r2 in F4_REGION_PAIRS:
+            a = regional_champs[region_to_idx[r1]]
+            b = regional_champs[region_to_idx[r2]]
             winner = a if rng.random() < prob_matrix[a, b] else b
             finalists.append(winner)
 
